@@ -9,10 +9,13 @@ import Mathlib.Logic.Equiv.Defs
 -- Finperm
 
 def support {α : Type*} (f : Equiv.Perm α) : Set α :=
-  {x : α | f x ≠ x}
+  {x | f x ≠ x}
 
-def Finperm (α : Type*) :=
-  {f : Equiv.Perm α | Set.Finite (support f) }
+def finperm (α : Type*) : Set (Equiv.Perm α) :=
+  {f | Set.Finite (support f) }
+
+def transposition (α : Type*) : Set (Equiv.Perm α) :=
+  {f | ∃ x y, x ≠ y ∧ f = }
 
 -- The type of words in the generators s₀, s₁, ...
 def Word := List ℕ
@@ -21,7 +24,7 @@ def Word.toPerm : Word → Equiv.Perm ℕ :=
   FreeMonoid.lift fun i => Equiv.swap i (i+1)
 
 -- All finitely supported permutations can be written as words
-example : Set.range Word.toPerm = Finperm ℕ := sorry
+example : Set.range Word.toPerm = finperm ℕ := sorry
 
 -- The type of reduced words for a given permutation
 structure ReducedWord (f : Equiv.Perm ℕ) where
@@ -29,18 +32,21 @@ structure ReducedWord (f : Equiv.Perm ℕ) where
   eq : word.toPerm = f
   min (other : Word) : other.toPerm = f → word.length ≤ other.length
 
-def BruhatSubword (g h : Finperm ℕ) : Prop :=
+def BruhatSubword (g h : finperm ℕ) : Prop :=
   ∃ (gw : ReducedWord g) (hw : ReducedWord h), List.Sublist gw.word hw.word
 
-def BruhatPrefix (g h : Finperm ℕ) : Prop :=
+def BruhatPrefix (g h : finperm ℕ) : Prop :=
   ∃ (gw : ReducedWord g) (hw : ReducedWord h), List.IsPrefix gw.word hw.word
 
-def BruhatSuffix (g h : Finperm ℕ) : Prop :=
+def BruhatSuffix (g h : finperm ℕ) : Prop :=
   ∃ (gw : ReducedWord g) (hw : ReducedWord h), List.IsSuffix gw.word hw.word
 
 -- These are partial orders on the set of finitely supported permutations
-example : IsPartialOrder (Finperm ℕ) BruhatSubword := sorry
+example : IsPartialOrder (finperm ℕ) BruhatSubword := sorry
 
-example : IsPartialOrder (Finperm ℕ) BruhatPrefix := sorry
+example : IsPartialOrder (finperm ℕ) BruhatPrefix := sorry
 
-example : IsPartialOrder (Finperm ℕ) BruhatSuffix := sorry
+example : IsPartialOrder (finperm ℕ) BruhatSuffix := sorry
+
+def transposition : Set
+example : Type := {f : Equiv.Perm ℕ | ∃ (i j : ℕ), i ≠ j ∧ f = Equiv.swap i j}
