@@ -31,6 +31,27 @@ instance mulActionPermSet (α : Type*) : MulAction (Equiv.Perm α) (Set α) := S
 @[simp] theorem support'_one (α : Type*) : support' (1 : Equiv.Perm α) = ∅ := by
   ext; simp
 
+@[simp] theorem support'_eq_empty {f : Equiv.Perm α} : support' f = ∅ ↔ f = 1 := by
+  refine ⟨fun h ↦ ?_, fun h ↦ h.symm ▸ support'_one α⟩
+  ext x
+  simp only [support', ne_eq, eq_empty_iff_forall_not_mem, mem_setOf_eq, not_not] at h
+  exact h x
+
+theorem support'_ne_singleton (f : Equiv.Perm α) (a : α) : f.support' ≠ {a} := by
+  intro h
+  simp only [Set.ext_iff, mem_support', ne_eq, mem_singleton_iff] at h
+  specialize h (f.symm a)
+  rw [eq_comm] at h
+  simp only [apply_symm_apply, not_iff_self] at h
+
+theorem exists_ne_of_mem_support' (ha : a ∈ f.support') : ∃ b ∈ f.support', b ≠ a := by
+  refine by_contra <| fun h ↦ support'_ne_singleton f a ?_
+  simp only [Set.ext_iff, mem_support', ne_eq, mem_singleton_iff]
+  simp only [mem_support', ne_eq, not_exists, not_and, not_not] at h
+  refine fun x ↦ ⟨fun h' ↦ h _ h', ?_⟩
+  rintro rfl
+  exact ha
+
 @[simp] theorem support'_inv (f : Equiv.Perm α) : support' (f ⁻¹) = support' f := by
   ext x
   rw [mem_support', ne_eq, mem_support', inv_eq_iff_eq, eq_comm]
