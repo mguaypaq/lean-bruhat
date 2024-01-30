@@ -10,7 +10,7 @@ import Mathlib.Data.Set.Pointwise.SMul
 open Finset
 open Equiv.Perm
 
-variable {α : Type*} {x y : α} {f g : Equiv.Perm α}
+variable {α : Type*} {x y : α}
 
 @[ext] structure Finperm (α : Type*) where
   toPerm : Equiv.Perm α
@@ -18,6 +18,8 @@ variable {α : Type*} {x y : α} {f g : Equiv.Perm α}
   mem_support_iff' (x : α) : x ∈ support ↔ toPerm x ≠ x
 
 namespace Finperm
+
+variable {f g : Finperm α}
 
 instance {α : Type*} : CoeOut (Finperm α) (Equiv.Perm α) where
   coe f := f.toPerm
@@ -46,6 +48,9 @@ theorem funext {f g : Finperm α} (h : ∀ x, f x = g x) : f = g := by
   ext x
   exact h x
 
+theorem inj_iff {x y : α} : f x = f y ↔ x = y :=
+  EquivLike.apply_eq_iff_eq f.toPerm
+
 theorem funext_support {f g : Finperm α} (h : f.support = g.support)
     (h' : ∀ i ∈ f.support, f i = g i) : f = g := by
   refine funext <| fun x ↦ ?_
@@ -59,9 +64,14 @@ theorem funext_support {f g : Finperm α} (h : f.support = g.support)
 theorem funext_support_subset {s : Finset α} {f g : Finperm α} (hf : f.support ⊆ s)
     (hg : g.support ⊆ s) (h : ∀ i ∈ s, f i = g i) : f = g := by
   refine funext <| fun x ↦ ?_
-  sorry
-  -- refine funext_support ?_ (fun i hi ↦ h i (hf hi))
+  obtain (hx | hx) := em (x ∈ s)
+  · exact h _ hx
+  rw [(show f x = x by simpa using not_mem_mono hf hx),
+    (show g x = x by simpa using not_mem_mono hg hx)]
 
+theorem funext_support_union [DecidableEq α] {f g : Finperm α}
+    (h : ∀ i ∈ f.support ∪ g.support, f i = g i) : f = g :=
+  funext_support_subset (subset_union_left _ _) (subset_union_right _ _) h
 
 theorem funext_support_iff {f g : Finperm α} : f = g ↔ f.support = g.support ∧
     ∀ i ∈ f.support, f i = g i :=
@@ -70,7 +80,7 @@ theorem funext_support_iff {f g : Finperm α} : f = g ↔ f.support = g.support 
 instance [DecidableEq α] : DecidableEq (Finperm α) :=
   fun _ _ ↦ @decidable_of_iff _ _ funext_support_iff.symm And.decidable
 
-@[simps] def symm (f : Finperm α) : Finperm α where
+@[simps, pp_dot] def symm (f : Finperm α) : Finperm α where
   toPerm := (f : Equiv.Perm α).symm
   support := f.support
   mem_support_iff' := by
@@ -86,6 +96,7 @@ instance [DecidableEq α] : DecidableEq (Finperm α) :=
 
 @[simp] theorem apply_symm_apply (f : Finperm α) (x : α) : f (f.symm x) = x :=
   Equiv.apply_symm_apply (f : Equiv.Perm α) x
+
 
 @[simps] def refl {α : Type*} : Finperm α where
   toPerm := 1
@@ -119,6 +130,8 @@ instance : Mul (Finperm α) where
 theorem mul_support_subset (f g : Finperm α) : (f * g).support ⊆ f.support ∪ g.support :=
   Finset.filter_subset _ _
 
+theorem mul_support_eq (f g : Finperm α) :
+  (f * g).support = (f.support ∪ g.support).filter (fun x ↦ f (g x) ≠ x) := rfl
 
 /-- Finitely supported permutations are a group -/
 instance : Group (Finperm α) where
@@ -134,6 +147,24 @@ theorem one_def : (1 : Finperm α) = refl := rfl
 @[simp] theorem one_support (α : Type*) [DecidableEq α] : (1 : Finperm α).support = ∅ := rfl
 
 @[simp] theorem one_apply (x : α) : (1 : Finperm α) x = x := rfl
+
+@[simp] theorem mul_refl (f : Finperm α) : f * refl = f := mul_one f
+
+@[simp] theorem refl_mul (f : Finperm α) : refl * f = f := one_mul f
+
+theorem inv_def (f : Finperm α) : f⁻¹ = f.symm := rfl
+
+@[simp] theorem inv_support (f : Finperm α) : f⁻¹.support = f.support := rfl
+
+theorem inv_eq_iff_eq : f⁻¹ x = y ↔ x = f y := Equiv.Perm.inv_eq_iff_eq
+
+theorem eq_inv_iff_eq : x = f⁻¹ y ↔ f x = y := Equiv.Perm.eq_inv_iff_eq
+
+@[simp] theorem inv_apply_apply (f : Finperm α) (x : α) : f⁻¹ (f x) = x :=
+  Equiv.symm_apply_apply (f : Equiv.Perm α) x
+
+@[simp] theorem apply_inv_apply (f : Finperm α) (x : α) : f (f⁻¹ x) = x :=
+  Equiv.apply_symm_apply (f : Equiv.Perm α) x
 
 
 end Group
@@ -168,7 +199,7 @@ variable [DecidableEq α]
 theorem swap_apply_of_ne_of_ne {z : α} (hx : z ≠ x) (hy : z ≠ y) : (swap x y) z = z :=
   Equiv.swap_apply_of_ne_of_ne hx hy
 
-theorem swap_support' (hxy : x ≠ y) : (swap x y).support = {x,y} := by
+theorem swap_support_of_ne (hxy : x ≠ y) : (swap x y).support = {x,y} := by
   simp [swap, hxy]
 
 theorem swap_comm (a b : α) : swap a b = swap b a := by
@@ -179,27 +210,97 @@ theorem swap_mul_swap (a b : α) : swap a b * swap a b = 1 := by
   · simp [one_def]
   apply funext_support_subset (s := {a,b})
   · refine (mul_support_subset _ _).trans ?_
-    rw [Finset.union_self, swap_support' hne]
+    rw [Finset.union_self, swap_support_of_ne hne]
   · simp
   simp
 
--- theorem foo1 (a b c : α) : (swap a b) * (swap b c) = swap a c := by
---   obtain (rfl | hne) := eq_or_ne a c
---   · rw [swap_comm, swap_self, swap_mul_swap, one_def]
---   obtain (rfl | hne') := eq_or_ne a b
---   · simp [one_def]
---   apply funext_support_subset (s := {a,b,c})
---   · exact (mul_support_subset _ _).trans (union_subset (by aesop) (by aesop))
---   · aesop
---   simp only [mem_insert, mem_singleton, mul_apply, forall_eq_or_imp, swap_apply_left, forall_eq,
---     swap_apply_right, and_true]
+theorem swap_conj_eq (hxz : x ≠ z) (hyz : y ≠ z) :
+    (swap x y) * (swap y z) * (swap x y) = swap x z := by
+  obtain (rfl | hxy) := eq_or_ne x y
+  · simp
+  apply funext_support_subset (s := {x,y,z})
+  · rw [mul_support_eq, mul_support_eq]
+    simp only [mul_apply, ne_eq, swap_support, filter_congr_decidable, if_neg hxy, if_neg hyz]
+    refine (filter_subset _ _).trans (union_subset ((filter_subset _ _).trans ?_) (by aesop))
+    apply union_subset <;> aesop
+  · aesop
+  simp only [mem_insert, mem_singleton, mul_apply, forall_eq_or_imp, swap_apply_left,
+    swap_apply_right, forall_eq]
+  rw [swap_apply_of_ne_of_ne hxz.symm hyz.symm, swap_apply_of_ne_of_ne hxy hxz,
+    swap_apply_of_ne_of_ne hxy.symm hyz]
+  simp
 
---   rw [swap_apply_of_ne_of_ne hne' hne]
---   simp
+theorem support_mul_pair_subset (hx : x ∈ f.support) :
+    (f * swap x (f⁻¹ x)).support ⊆ f.support.erase x := by
+  intro y hy
+  simp only [mem_erase, ne_eq, mem_support_iff]
+  obtain (rfl | hne) := eq_or_ne y x
+  · simp at hy
+  refine ⟨hne, fun hy' ↦ ?_⟩
+  simp only [mem_support_iff, mul_apply, ne_eq] at hy
+  obtain (rfl | hne') := eq_or_ne y (f⁻¹ x)
+  · simp only [swap_apply_right, apply_inv_apply] at hy'
+    rw [← hy'] at hne
+    exact hne rfl
+  rw [swap_apply_of_ne_of_ne hne hne'] at hy
+  exact hy hy'
 
---   · ext x
---     simp
+def swaps (α : Type*) [DecidableEq α] : Set (Finperm α) :=
+    {s : Finperm α | ∃ (x y : α) (_ : x ≠ y), s = swap x y}
 
+theorem support_closure_aux (f : Finperm α) : f ∈ Subgroup.closure (swaps α) := by
+  obtain (h | h) := eq_or_ne f.support ∅
+  · rw [show f = 1 from (support_eq_empty_iff _).1 h]
+    exact Subgroup.one_mem _
+  simp only [ne_eq, eq_empty_iff_forall_not_mem, mem_support_iff, not_not, not_forall] at h
+  obtain ⟨x, hx⟩ := h
+  have hx' : x ∈ f.support := by simpa
+  set g := f * swap x (f⁻¹ x) with hg_def
+  have _ : g.support.card < f.support.card := by
+    have hsupp : g.support ⊆ _ := support_mul_pair_subset hx'
+    exact card_lt_card <| (hsupp.trans_ssubset (erase_ssubset hx'))
+  have hg := support_closure_aux g
+  have hs : swap x (f⁻¹ x) ∈ Subgroup.closure (swaps α)
+  · exact Subgroup.subset_closure ⟨_, _, by rwa [ne_eq, eq_inv_iff_eq], rfl⟩
+  have hf' : f = g * (swap x (f⁻¹ x))
+  · rw [hg_def, mul_assoc, swap_mul_swap, mul_one]
+  rw [hf']
+  exact Subgroup.mul_mem _ hg hs
+termination_by _ => f.support.card
 
+theorem cl_swaps_eq_top (α : Type*) [DecidableEq α] : Subgroup.closure (swaps α) = ⊤ := by
+  ext f
+  simp only [Subgroup.mem_top, iff_true]
+  exact support_closure_aux f
 
 end Swap
+
+section Map
+
+variable {α β : Type*} [DecidableEq α] [DecidableEq β] {f : Finperm α}
+
+/-- The subgroup of `Finperm`s with support contained in some set `s` -/
+def restrict (s : Set α) : Subgroup (Finperm α) where
+  carrier := {f | (f.support : Set α) ⊆ s}
+  mul_mem' {f} {g} hf hg := by
+    refine (Finset.coe_subset.2 (mul_support_subset f g)).trans ?_
+    rw [coe_union, Set.union_subset_iff]
+    exact ⟨hf, hg⟩
+  one_mem' := by simp
+  inv_mem' := by simp
+
+@[simp] theorem mem_restrict_iff {s : Set α} : f ∈ restrict s ↔ (f.support : Set α) ⊆ s := Iff.rfl
+
+theorem restrict_mono {s t : Set α} (hst : s ⊆ t) : restrict s ≤ restrict t :=
+  fun _ hi ↦ Set.Subset.trans hi hst
+
+
+
+
+-- noncomputable def foo (i : α ↪ β) : Finperm α ≃ {f : // f.support ⊆ range i} where
+--   toFun f := by
+--     _
+--   map_one' := _
+--   map_mul' := _
+
+end Map
