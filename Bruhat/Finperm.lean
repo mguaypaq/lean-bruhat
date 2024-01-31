@@ -6,6 +6,7 @@ import Mathlib.GroupTheory.Subgroup.Basic
 import Mathlib.GroupTheory.Perm.Basic
 import Mathlib.Data.Set.Finite
 import Mathlib.Data.Set.Pointwise.SMul
+import Mathlib.Tactic.Linarith
 
 open Finset
 open Equiv.Perm
@@ -170,6 +171,60 @@ theorem eq_inv_iff_eq : x = f⁻¹ y ↔ f x = y := Equiv.Perm.eq_inv_iff_eq
 end Group
 
 
+section Map
+
+variable {α β : Type*} [DecidableEq α] [DecidableEq β] {f : Finperm α}
+
+/-- The subgroup of `Finperm`s with support contained in some set `s` -/
+def restrict (s : Set α) : Subgroup (Finperm α) where
+  carrier := {f | (f.support : Set α) ⊆ s}
+  mul_mem' {f} {g} hf hg := by
+    refine (Finset.coe_subset.2 (mul_support_subset f g)).trans ?_
+    rw [coe_union, Set.union_subset_iff]
+    exact ⟨hf, hg⟩
+  one_mem' := by simp
+  inv_mem' := by simp
+
+@[simp] theorem mem_restrict_iff {s : Set α} : f ∈ restrict s ↔ (f.support : Set α) ⊆ s := Iff.rfl
+
+theorem restrict_mono {s t : Set α} (hst : s ⊆ t) : restrict s ≤ restrict t :=
+  fun _ hi ↦ Set.Subset.trans hi hst
+
+@[simp] theorem restrict_univ (α : Type*) [DecidableEq α] :
+    Finperm.restrict (Set.univ : Set α) = ⊤ := by
+  ext; simp
+
+theorem mem_restrict_support (f : Finperm α) : f ∈ restrict f.support := by
+  simp
+
+def congr (e : α ≃ β) : Finperm α ≃* Finperm β where
+  toFun f := {
+    toPerm := e.symm.trans ((f : Equiv.Perm α).trans e)
+    support := f.support.image e
+    mem_support_iff' := by
+      intro x
+      simp only [mem_image, mem_support_iff, ne_eq, Equiv.trans_apply, toPerm_eq_coe]
+      refine ⟨by rintro ⟨a, ha, rfl⟩; simpa, fun h ↦ ?_⟩
+      exact ⟨e.symm x, fun h' ↦ h <| by rw [h', e.apply_symm_apply], e.apply_symm_apply _⟩ }
+  invFun f := {
+    toPerm := e.trans ((f : Equiv.Perm β).trans e.symm)
+    support := f.support.image e.symm
+    mem_support_iff' := by
+      intro x
+      simp only [mem_image, mem_support_iff, ne_eq, Equiv.trans_apply]
+      exact ⟨by rintro ⟨a, ha, rfl⟩; simpa, fun h ↦ ⟨e x, fun h' ↦ h (by simp [h']), by simp⟩⟩}
+  left_inv f := by ext <;> simp
+  right_inv f := by ext <;> simp
+  map_mul' f g := by
+    ext x
+    simp only [Equiv.trans_apply, toPerm_eq_coe, mul_apply]
+    change _ = (e.symm.trans _) ((e.symm.trans _) _)
+    sorry
+    sorry
+
+
+
+end Map
 section Swap
 
 variable [DecidableEq α]
@@ -248,7 +303,24 @@ theorem support_mul_pair_subset (hx : x ∈ f.support) :
 def swaps (α : Type*) [DecidableEq α] : Set (Finperm α) :=
     {s : Finperm α | ∃ (x y : α) (_ : x ≠ y), s = swap x y}
 
-theorem support_closure_aux (f : Finperm α) : f ∈ Subgroup.closure (swaps α) := by
+/-- The set of swaps of pairs in a set `t`-/
+def swapsOf (t : Set α) :=
+  {s : Finperm α | ∃ (x y : α) (_ : x ∈ t) (_ : y ∈ t) (_ : x ≠ y), s = swap x y}
+
+@[simp] theorem swapsOf_univ_eq (α : Type*) [DecidableEq α] :
+    swapsOf (Set.univ : Set α) = swaps α := by
+  simp [swaps, swapsOf]
+
+theorem swapsOf_support_subset {t : Set α} (hf : f ∈ swapsOf t) : (f.support : Set α) ⊆ t := by
+  obtain ⟨i,j, hi, hj, hne, rfl⟩ := hf
+  rwa [swap_support_of_ne hne, coe_insert, Set.insert_subset_iff, coe_singleton,
+    Set.singleton_subset_iff, and_iff_right hi]
+
+theorem swapsOf_subset_restrict (t : Set α) : swapsOf t ⊆ Finperm.restrict t :=
+  fun _ hf ↦ swapsOf_support_subset hf
+
+theorem support_closure_aux {t : Set α} {f : Finperm α} (hf : (f.support : Set α) ⊆ t) :
+    f ∈ Subgroup.closure (swapsOf t) := by
   obtain (h | h) := eq_or_ne f.support ∅
   · rw [show f = 1 from (support_eq_empty_iff _).1 h]
     exact Subgroup.one_mem _
@@ -256,51 +328,112 @@ theorem support_closure_aux (f : Finperm α) : f ∈ Subgroup.closure (swaps α)
   obtain ⟨x, hx⟩ := h
   have hx' : x ∈ f.support := by simpa
   set g := f * swap x (f⁻¹ x) with hg_def
+  have hsupp : g.support ⊆ _ := support_mul_pair_subset hx'
   have _ : g.support.card < f.support.card := by
-    have hsupp : g.support ⊆ _ := support_mul_pair_subset hx'
     exact card_lt_card <| (hsupp.trans_ssubset (erase_ssubset hx'))
-  have hg := support_closure_aux g
-  have hs : swap x (f⁻¹ x) ∈ Subgroup.closure (swaps α)
-  · exact Subgroup.subset_closure ⟨_, _, by rwa [ne_eq, eq_inv_iff_eq], rfl⟩
+  have hg_supp : (g.support : Set α) ⊆ t
+  · refine (Finset.coe_subset.2 hsupp).trans (subset_trans (Finset.coe_subset.2 ?_) hf)
+    exact erase_subset x f.support
+  have hg := support_closure_aux hg_supp
+  have hs : swap x (f⁻¹ x) ∈ Subgroup.closure (swapsOf t)
+  · refine Subgroup.subset_closure ⟨_, _, hf hx', hf ?_, ?_, rfl⟩
+    · rwa [mem_coe, mem_support_iff, apply_inv_apply, ne_eq, eq_inv_iff_eq]
+    rwa [ne_eq, eq_inv_iff_eq]
   have hf' : f = g * (swap x (f⁻¹ x))
   · rw [hg_def, mul_assoc, swap_mul_swap, mul_one]
   rw [hf']
   exact Subgroup.mul_mem _ hg hs
 termination_by _ => f.support.card
 
+theorem cl_swapsOf_eq (t : Set α) : Subgroup.closure (swapsOf t) = Finperm.restrict t :=
+  ((Subgroup.closure_le _).2 <| swapsOf_subset_restrict t).antisymm (fun _ ↦ support_closure_aux)
+
 theorem cl_swaps_eq_top (α : Type*) [DecidableEq α] : Subgroup.closure (swaps α) = ⊤ := by
-  ext f
-  simp only [Subgroup.mem_top, iff_true]
-  exact support_closure_aux f
+  rw [← swapsOf_univ_eq, ← restrict_univ]
+  exact cl_swapsOf_eq _
+
+/-- The set of all swaps `x i` where `i ∈ t` -/
+def swapsAt (x : α) (t : Set α) : Set (Finperm α) := (swap x ·) '' (t \ {x})
+
+theorem swapsAt_subset_swapsOf (x : α) (t : Set α) : swapsAt x t ⊆ swapsOf (insert x t) := by
+  rintro s ⟨i, hi, rfl⟩
+  exact ⟨x, _, Or.inl rfl, Or.inr hi.1, Ne.symm hi.2, rfl⟩
+
+theorem cl_swapsAt_eq (x : α) (t : Set α) :
+    Subgroup.closure (swapsAt x t) = Finperm.restrict (insert x t) := by
+  have aux : ∀ {y}, y ∈ insert x t → swap x y ∈ Subgroup.closure (swapsAt x t)
+  · intro y hy
+    rw [← Set.insert_diff_singleton] at hy
+    obtain (rfl | hy) := hy
+    · rw [swap_self, ← one_def]
+      exact Subgroup.one_mem _
+    exact Subgroup.subset_closure ⟨y, hy, rfl⟩
+  rw [← cl_swapsOf_eq, le_antisymm_iff]
+  refine ⟨Subgroup.closure_mono (swapsAt_subset_swapsOf _ _), (Subgroup.closure_le _).2 ?_⟩
+  rintro _ ⟨i, j, hi, hj, hne, rfl⟩
+  obtain (rfl | hjne) := eq_or_ne x j
+  · rw [swap_comm]; exact aux hi
+  rw [← swap_conj_eq hne hjne, swap_comm i]
+  exact mul_mem (mul_mem (aux hi) (aux hj)) (aux hi)
+
+theorem cl_swapsAt_eq' {x : α} {t : Set α} (hxt : x ∈ t) :
+    Subgroup.closure (swapsAt x t) = Finperm.restrict t := by
+  rw [cl_swapsAt_eq, Set.insert_eq_of_mem hxt]
 
 end Swap
 
-section Map
+section Nat
 
-variable {α β : Type*} [DecidableEq α] [DecidableEq β] {f : Finperm α}
+variable {f : Finperm ℕ}
 
-/-- The subgroup of `Finperm`s with support contained in some set `s` -/
-def restrict (s : Set α) : Subgroup (Finperm α) where
-  carrier := {f | (f.support : Set α) ⊆ s}
-  mul_mem' {f} {g} hf hg := by
-    refine (Finset.coe_subset.2 (mul_support_subset f g)).trans ?_
-    rw [coe_union, Set.union_subset_iff]
-    exact ⟨hf, hg⟩
-  one_mem' := by simp
-  inv_mem' := by simp
+def ub (f : Finperm ℕ) : ℕ := Nat.find f.support.exists_nat_subset_range
 
-@[simp] theorem mem_restrict_iff {s : Set α} : f ∈ restrict s ↔ (f.support : Set α) ⊆ s := Iff.rfl
+theorem lt_ub (f : Finperm ℕ) (h : i ∈ f.support) : i < f.ub :=
+  List.mem_range.1 <| Nat.find_spec f.support.exists_nat_subset_range h
 
-theorem restrict_mono {s t : Set α} (hst : s ⊆ t) : restrict s ≤ restrict t :=
-  fun _ hi ↦ Set.Subset.trans hi hst
+def adjSwapsBelow (n : ℕ) : Set (Finperm ℕ) := ((fun (i : ℕ) ↦ swap i (i+1)) '' (Set.Iio n))
 
+theorem adjSwapsBelow_mono (hmn : m ≤ n) : adjSwapsBelow m ⊆ adjSwapsBelow n :=
+  Set.image_subset _ (Set.Iio_subset_Iio hmn)
 
+theorem adjSwapsBelow_aux (n : ℕ) : swap 0 n ∈ Subgroup.closure (adjSwapsBelow n) := by
+  induction' n with n IH
+  · simp only [Nat.zero_eq, swap_self, ← one_def]
+    exact Subgroup.one_mem (Subgroup.closure (adjSwapsBelow 0))
+  simp [Nat.succ_eq_add_one]
+  rw [← swap_conj_eq (x := 0) (y := n) (z := n+1)]
+  · refine Subgroup.mul_mem _ (Subgroup.mul_mem _ ?_ ?_) ?_
+    · exact Subgroup.closure_mono (adjSwapsBelow_mono (le_self_add : n ≤ n +1)) IH
+    · exact Subgroup.subset_closure ⟨n, by simp, rfl⟩
+    exact Subgroup.closure_mono (adjSwapsBelow_mono (le_self_add : n ≤ n +1)) IH
+  · exact Nat.ne_of_beq_eq_false rfl
+  exact Ne.symm (Nat.succ_ne_self n)
 
+theorem closure_adjSwapsBelow_eq (n : ℕ) :
+    Subgroup.closure (adjSwapsBelow n) = Finperm.restrict (Set.Iic n) := by
+  refine le_antisymm ((Subgroup.closure_le _).2 ?_) ?_
+  · rintro x ⟨i, hi, rfl⟩
+    simp only [SetLike.mem_coe, mem_restrict_iff, swap_support, self_eq_add_right, ite_false,
+      coe_insert, coe_singleton, Set.insert_subset_iff, Set.mem_Iic, Set.singleton_subset_iff]
+    rw [Set.mem_Iio, ← Nat.add_one_le_iff] at hi
+    constructor <;> linarith
+  rw [← cl_swapsAt_eq' (x := 0) (by simp)]
+  apply (Subgroup.closure_le _).2
+  rintro _ ⟨i, ⟨hi : i ≤ n, -⟩, rfl⟩
+  simp only [SetLike.mem_coe]
+  exact Subgroup.closure_mono (adjSwapsBelow_mono hi) <| adjSwapsBelow_aux i
 
--- noncomputable def foo (i : α ↪ β) : Finperm α ≃ {f : // f.support ⊆ range i} where
---   toFun f := by
---     _
---   map_one' := _
---   map_mul' := _
+def adjSwaps : Set (Finperm ℕ) := Set.range (fun i ↦ swap i (i+1))
 
-end Map
+theorem closure_adjSwaps_eq : Subgroup.closure adjSwaps = ⊤ := by
+  ext f
+  simp only [Subgroup.mem_top, iff_true]
+  have hss : (f.support : Set ℕ) ⊆ Set.Iic f.ub
+  · exact fun x hx ↦ (f.lt_ub hx).le
+  have hf := restrict_mono hss <| mem_restrict_support f
+  rw [← closure_adjSwapsBelow_eq] at hf
+  refine (Subgroup.closure_mono ?_) hf
+  rintro _ ⟨i, -, rfl⟩
+  exact ⟨i, rfl⟩
+
+end Nat

@@ -83,10 +83,7 @@ section Inversions
 
 variable {f : Finperm ℕ} {i x n : ℕ}
 
-def Finperm.ub (f : Finperm ℕ) : ℕ := Nat.find f.support.exists_nat_subset_range
 
-theorem Finperm.lt_ub (h : i ∈ f.support) : i < f.ub :=
-  List.mem_range.1 <| Nat.find_spec f.support.exists_nat_subset_range h
 
 def Finperm.inversions (f : Finperm ℕ) : Set (ℕ × ℕ) := {p | p.1 < p.2 ∧ f p.2 < f p.1}
 
