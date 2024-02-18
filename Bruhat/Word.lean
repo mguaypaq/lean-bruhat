@@ -63,11 +63,39 @@ def support {α : Type*} (f : Equiv.Perm α) : Set α :=
   {x | f x ≠ x}
 
 lemma apply_of_not_mem_support {α : Type*} (f : Equiv.Perm α) (a : α) (ha : a ∉ support f) :
-  f a = a := by
-  by_contra ha'
-  exact ha ha'
+  f a = a := not_not.mp ha
 
-lemma id_iff_support_empty {α : Type*} (f : Equiv.Perm α) :
+lemma support_inv {α : Type*} (f : Equiv.Perm α) :
+  support f = support f⁻¹ := by
+  ext a
+  simp [support, not_iff_not]
+  rw [← Equiv.Perm.eq_inv_iff_eq, eq_comm]
+
+lemma support_min_lt_inv_apply (f : Equiv.Perm ℕ) (hf : ∃ n, f n ≠ n) :
+  (Nat.find hf) < f⁻¹ (Nat.find hf) := by
+  set n := Nat.find hf with hn
+  obtain ⟨hn', hn''⟩ := (Nat.find_eq_iff hf).mp hn.symm
+  specialize hn'' (f⁻¹ n)
+  rw [imp_not_comm, not_lt, f.apply_inv_self] at hn''
+  rw [ne_eq, ← Equiv.Perm.eq_inv_iff_eq] at hn'
+  apply lt_of_le_of_ne (hn'' hn') hn'
+
+lemma support_min_lt_apply (f : Equiv.Perm ℕ) (hf : ∃ n, f n ≠ n) :
+  (Nat.find hf) < f (Nat.find hf) := by
+  have hg : ∃ n, f⁻¹ n ≠ n
+  . simp_rw [ne_comm, ne_eq, Equiv.Perm.eq_inv_iff_eq]
+    exact hf
+  have hf_finv : ∀ n, f n ≠ n ↔ f⁻¹ n ≠ n
+  . simp_rw [ne_comm, ne_eq, Equiv.Perm.eq_inv_iff_eq, eq_comm]
+    exact fun n ↦ trivial
+  have key : Nat.find hf = Nat.find hg
+  . simp_rw [Nat.find_eq_iff, hf_finv, ← Nat.find_eq_iff hg]
+  rw [key]
+  have := support_min_lt_inv_apply f⁻¹ hg
+  rw [inv_inv] at this
+  exact this
+
+lemma support_empty_iff_id {α : Type*} (f : Equiv.Perm α) :
   support f = ∅ ↔ f = 1 := by
   simp only [Set.eq_empty_iff_forall_not_mem, support,
               ne_eq, Set.mem_setOf_eq, not_not]
@@ -103,7 +131,7 @@ lemma repbleByWord_aux (s : Set ℕ) (hs : Set.Finite s) : RepbleByWord_aux s :=
   apply @Set.Finite.induction_on _ RepbleByWord_aux _ hs
   all_goals clear s hs
   . intros f hf
-    rw [Set.subset_empty_iff, id_iff_support_empty] at hf
+    rw [Set.subset_empty_iff, support_empty_iff_id] at hf
     subst hf
     exact ⟨_, idHasWord⟩
   . intros a s _ _ hs_repble f hf
@@ -127,119 +155,99 @@ theorem repbleByWord (f : Equiv.Perm ℕ) (hf : (support f).Finite) : RepbleByWo
 
 end RepbleByWord
 
-section Inversions
+section Inversions_new
 
--- could really apply to any map of ordered sets
--- the symmetric definition actually seems kind of painful to work with
--- but we wanted it for the formula
-def Inversions [LinearOrder α] (g : Equiv.Perm α) : Set (α × α) :=
-  {p | p.fst ≠ p.snd ∧ (p.fst < p.snd ↔ g p.snd < g p.fst)}
+-- Inversions: we allow a < b or b < a
+-- This definition could really apply to any map of ordered sets
+def Inversions_new [LinearOrder α] (g : Equiv.Perm α) : Set (α × α) :=
+  {p | (p.fst < p.snd ↔ g p.snd ≤ g p.fst)}
 
-lemma mem_inversions [LinearOrder α] (g : Equiv.Perm α) (p : α × α) :
-  p ∈ Inversions g ↔ p.fst ≠ p.snd ∧ (p.fst < p.snd ↔ g p.snd < g p.fst) := by rfl
+lemma mem_inversions_new [LinearOrder α] (g : Equiv.Perm α) (p : α × α) :
+  p ∈ Inversions_new g ↔ (p.fst < p.snd ↔ g p.snd ≤ g p.fst) := by rfl
 
-lemma mem_inversions' [LinearOrder α] (g : Equiv.Perm α) (a b : α) :
-  (a, b) ∈ Inversions g ↔ a ≠ b ∧ (a < b ↔ g b < g a) := by rfl
+lemma mem_inversions_new' [LinearOrder α] (g : Equiv.Perm α) (a b : α) :
+  (a, b) ∈ Inversions_new g ↔ (a < b ↔ g b ≤ g a) := by rfl
 
-lemma notmem_inversions [LinearOrder α] (g : Equiv.Perm α) (p : α × α) :
-  p ∉ Inversions g ↔ p.fst = p.snd ∨ ¬(p.fst < p.snd ↔ g p.snd < g p.fst) := by
-  rw [Inversions, Set.mem_setOf_eq, ne_eq, not_and_or, not_not]
+lemma not_mem_inversions_diag_new [LinearOrder α] (g : Equiv.Perm α) (a : α) :
+  (a, a) ∉ Inversions_new g := by simp [mem_inversions_new']
 
-lemma notmem_inversions' [LinearOrder α] (g : Equiv.Perm α) (a b : α) :
-  (a, b) ∉ Inversions g ↔ a = b ∨ ¬(a < b ↔ g b < g a) := by
-  rw [Inversions, Set.mem_setOf_eq, ne_eq, not_and_or, not_not]
+lemma mem_inversions_symm_new [LinearOrder α] (g : Equiv.Perm α) (a b : α) :
+  (a, b) ∈ Inversions_new g ↔ (b, a) ∈ Inversions_new g := by
+  simp only [mem_inversions_new']
+  wlog h : a < b
+  . push_neg at h
+    cases' eq_or_lt_of_le h with h' h'
+    . simp [h']
+    rw [this _ _ _ h']
+  have h' : g a ≠ g b := fun hg => h.ne (g.injective hg)
+  simp [h, h.not_lt, h'.symm.le_iff_lt]
 
-lemma notmem_inversions_diag [LinearOrder α] (g : Equiv.Perm α) (a : α) :
-  (a, a) ∉ Inversions g := by simp [Inversions]
+lemma mem_support_of_inversion [LinearOrder α] (g : Equiv.Perm α) (a b : α)
+  (hab : (a, b) ∈ Inversions_new g) : a ∈ support g ∨ b ∈ support g := by
+  rw [mem_inversions_new'] at hab
+  simp [support]
+  by_contra! hab'
+  rw [hab'.1, hab'.2, ← not_le] at hab
+  exact not_iff_self hab
 
-lemma mem_inversions_of_lt [LinearOrder α] (g : Equiv.Perm α)
-  {a b : α} (hab : a < b) :
-  (a, b) ∈ Inversions g ↔ g b < g a := by
-  rw [Inversions, Set.mem_setOf_eq, ne_eq]
-  simp [hab, hab.ne]
+lemma min_support_mem_inversions_new (f : Equiv.Perm ℕ) (hf : ∃ n, f n ≠ n) :
+  (Nat.find hf, f⁻¹ (Nat.find hf)) ∈ Inversions_new f := by
+  rw [mem_inversions_new']
+  simp only [support_min_lt_inv_apply f hf, Equiv.Perm.apply_inv_self,
+             (support_min_lt_apply f hf).le]
 
-lemma not_mem_inversions_of_lt [LinearOrder α] (g : Equiv.Perm α)
-  {a b : α} (hab : a < b) :
-  (a, b) ∉ Inversions g ↔ g a < g b := by
-  rw [mem_inversions_of_lt g hab, not_lt, le_iff_eq_or_lt, or_iff_right]
-  exact fun hg ↦ hab.ne (g.injective hg)
-
-lemma mem_inversions_symm [LinearOrder α] (g : Equiv.Perm α) (a b : α) :
-  (a, b) ∈ Inversions g ↔ (b, a) ∈ Inversions g := by
-  by_cases h : a = b
-  . subst b
-    simp [notmem_inversions_diag]
-  change a ≠ b at h
-  wlog hlt : a < b with key
-  . push_neg at hlt
-    specialize key g b a h.symm (hlt.lt_of_ne h.symm)
-    rw [key]
-  rw [mem_inversions_of_lt g hlt, mem_inversions', and_iff_right h.symm]
-  simp [hlt.not_lt, le_iff_eq_or_lt, or_iff_right h.symm]
-
-def SInversions [LinearOrder α] (g : Equiv.Perm α) : Set (α × α) :=
-  {p | p.fst < p.snd ∧ g p.snd < g p.fst}
-
-def SSInversions [LinearOrder α] (g : Equiv.Perm α) : Set (α × α) :=
-  {p | p.fst < p.snd ↔ g p.snd ≤ g p.fst}
-
-lemma inversions_empty_iff_increasing (f : Equiv.Perm ℕ) :
-  Inversions f = ∅ ↔ ∀ a b, a < b → f a < f b := by
-  simp_rw [Set.eq_empty_iff_forall_not_mem]
+lemma inversions_empty_iff_support_empty (f : Equiv.Perm ℕ) :
+  Inversions_new f = ∅ ↔ support f = ∅ := by
+  rw [← not_iff_not]
+  push_neg
   constructor
-  . intros hinv a b hab
-    specialize hinv (a, b)
-    exact (not_mem_inversions_of_lt _ hab).mp hinv
-  rintro h ⟨a, b⟩
-  by_cases h : a = b
-  . subst b
-    simp [Inversions]
-  cases' Nat.lt_or_lt_of_ne h with h h
+  . rintro ⟨⟨a, b⟩, hab⟩
+    cases' mem_support_of_inversion _ _ _ hab with ha hb
+    . exact ⟨_, ha⟩
+    . exact ⟨_, hb⟩
+  . exact fun hf => ⟨_, min_support_mem_inversions_new f hf⟩
 
 lemma inversions_empty_iff_id (f : Equiv.Perm ℕ) :
-  Inversions f = ∅ ↔ f = 1 := by
-  rw [inversions_empty_iff_increasing]
-  constructor
-  . intro hf_incr
-    ext n
-    apply Nat.strongInductionOn n
-    clear n
-    intros n hn
-    cases' lt_or_le n (f⁻¹ n) with h h
-    . specialize hf_incr _ _ h
-      simp only [Equiv.Perm.apply_inv_self] at hf_incr
-      apply f.injective (hn _ hf_incr)
-    cases' eq_or_lt_of_le h with h h
-    . nth_rewrite 1 [← h]
-      simp
-    specialize hn _ h
-    simp at hn
-    nth_rewrite 1 [hn]
-    simp
-  . rintro rfl
-    simp
-  done
+  Inversions_new f = ∅ ↔ f = 1 :=
+(inversions_empty_iff_support_empty f).trans (support_empty_iff_id f)
 
+section StdInversions
 
+-- Standard inversions (where we assume a < b)
+def StdInversions [LinearOrder α] (g : Equiv.Perm α) : Set (α × α) :=
+  {p | (p.fst < p.snd ∧ g p.snd ≤ g p.fst)}
 
-example [LinearOrder α] (g : Equiv.Perm α) :
-  Inversions g = SInversions g ∪ Prod.swap ⁻¹' (SInversions g) := by
-  ext ⟨i, j⟩
-  simp [Inversions, SInversions]
-  -- cases lt_or_eq_or_lt i j
-  obtain (hlt | hle) := lt_or_le i j
-  . sorry
-  obtain (rfl | hlt) := eq_or_lt_of_le hle
-  . aesop
-  . simp [hlt.ne.symm, hlt, hlt.not_lt]
-    rw [le_iff_lt_or_eq]
-    aesop
+lemma mem_stdinversions [LinearOrder α] (g : Equiv.Perm α) (p : α × α) :
+  p ∈ StdInversions g ↔ (p.fst < p.snd ∧ g p.snd ≤ g p.fst) := by rfl
 
-example (g : Equiv.Perm ℕ) (i : ℕ) (hi : g i = i) : (i, g i) ∉ Inversions g := by
-  simp [Inversions, hi]
-example (g : Equiv.Perm ℕ) (i j : ℕ) (hij : i < j) (gij : g j < g i) :
-  (i, j) ∈ Inversions g := by
-  simp [Inversions, hij, gij, hij.ne]
-example (g : Equiv.Perm ℕ) (i j : ℕ) (hij : j < i) (gij : g i < g j) :
-  (i, j) ∈ Inversions g := by
-  simp [Inversions, hij.not_lt, gij.not_lt, hij.ne.symm, gij.ne]
+lemma mem_stdinversions' [LinearOrder α] (g : Equiv.Perm α) (a b : α) :
+  (a, b) ∈ StdInversions g ↔ (a < b ∧ g b ≤ g a) := by rfl
+
+lemma mem_stdinversions'' [LinearOrder α] (g : Equiv.Perm α) (a b : α) :
+  (a, b) ∈ StdInversions g ↔ (a < b ∧ g b < g a) := by
+  rw [mem_stdinversions']
+  by_cases h : a = b
+  . simp [h]
+  . have h' : g a ≠ g b := fun hg => h (g.injective hg)
+    simp [h, h'.symm.le_iff_lt]
+
+lemma not_mem_stdinversions_diag [LinearOrder α] (g : Equiv.Perm α) (a : α) :
+  (a, a) ∉ StdInversions g := by simp [mem_stdinversions']
+
+-- The relationship between the inversions and the standard inversions
+lemma stdinversions_inversions [LinearOrder α] (g : Equiv.Perm α) :
+  Inversions_new g = StdInversions g ∪ Prod.swap ⁻¹' (StdInversions g) := by
+  ext ⟨a, b⟩
+  simp only [Set.mem_union, Set.mem_preimage, Prod.swap_prod_mk]
+  by_cases hab : a = b
+  . subst b
+    simp [not_mem_stdinversions_diag, not_mem_inversions_diag_new]
+  . push_neg at hab
+    obtain (hab | hba) := hab.lt_or_lt
+    . simp [mem_stdinversions', mem_inversions_new, hab, hab.not_lt]
+    . rw [mem_inversions_symm_new]
+      simp [mem_stdinversions', mem_inversions_new, hba, hba.not_lt]
+
+end StdInversions
+
+end Inversions_new
