@@ -226,6 +226,20 @@ lemma inversions_empty_iff_id (f : Equiv.Perm ℕ) :
   Inversions f = ∅ ↔ f = 1 :=
 (inversions_empty_iff_support_empty f).trans (support_empty_iff_id f)
 
+/- Mathieu's "workhorse lemma" -/
+lemma inversions_comp (f g : Equiv.Perm ℕ) :
+  Inversions (f * g) = (g.prodCongr g ⁻¹' Inversions f) ∆ Inversions g:= by
+  ext ⟨a, b⟩
+  simp only [Set.mem_symmDiff, Set.mem_preimage, Equiv.prodCongr_apply, Prod.map]
+  wlog h : a < b
+  . cases' (le_of_not_lt h).eq_or_lt with h' h'
+    . simp [h', not_mem_inversions_diag]
+    . repeat simp_rw [mem_inversions_symm _ a b, mem_inversions_symm _ (g a) (g b)]
+      exact this f g _ _ h'
+  cases' lt_or_le (g a) (g b) with hgab hgba
+  . simp [mem_inversions', Set.mem_symmDiff, h, hgab, hgab.not_le]
+  . simp [mem_inversions', Set.mem_symmDiff, h, hgba, hgba.not_lt]
+
 section StdInversions
 
 -- Standard inversions (where we assume a < b)
@@ -264,8 +278,5 @@ lemma stdinversions_inversions [LinearOrder α] (g : Equiv.Perm α) :
       simp [mem_stdinversions', mem_inversions, hba, hba.not_lt]
 
 end StdInversions
-
--- We should next try to show that a certain adjacency Equiv.swap deletes
--- an inversion.
 
 end Inversions
